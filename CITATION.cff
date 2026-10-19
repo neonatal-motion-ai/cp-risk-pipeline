@@ -1,0 +1,32 @@
+cff-version: 1.2.0
+message: "If you use this repository, please cite the article below."
+title: "cp-risk-pipeline: reproducibility subset"
+type: software
+license: Apache-2.0
+repository-code: "https://github.com/neonatal-motion-ai/cp-risk-pipeline"
+authors:
+  - family-names: "Ramírez Villegas"
+    given-names: "Gabriel Mauricio"
+  - family-names: "Ruiz Contreras"
+    given-names: "Sergio Armando"
+  - family-names: "Quintero"
+    given-names: "Carlos"
+  - family-names: "Cardona"
+    given-names: "Ana María"
+preferred-citation:
+  type: article
+  title: "A Neonate-Specific Self-Supervised Pose-Transformer Pipeline for Early Cerebral Palsy Risk Screening from General Movement Videos"
+  authors:
+    - family-names: "Ramírez Villegas"
+      given-names: "Gabriel Mauricio"
+    - family-names: "Ruiz Contreras"
+      given-names: "Sergio Armando"
+    - family-names: "Quintero"
+      given-names: "Carlos"
+    - family-names: "Cardona"
+      given-names: "Ana María"
+  journal: "Sci"
+  publisher:
+    name: "MDPI"
+  year: 2026
+  notes: "Accepted. DOI pending."

@@ -1,0 +1,14 @@
+cp-risk-pipeline (public reproducibility subset)
+Copyright 2026 Gabriel Mauricio Ramírez Villegas, Sergio Armando Ruiz Contreras,
+Carlos Quintero, Ana María Cardona.
+
+This product includes software developed by the authors listed above and is
+licensed under the Apache License, Version 2.0.
+
+It does not include, and grants no rights to, the proprietary pipeline
+components, trained models or data of the Comité de Rehabilitación de
+Antioquia.
+
+The pose-estimation network referenced in the documentation (EfficientHourglass,
+https://github.com/DeepInMotion/Markerless) is third-party software licensed
+under the Apache License, Version 2.0, and is not redistributed here.

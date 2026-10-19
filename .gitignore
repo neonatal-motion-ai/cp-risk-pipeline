@@ -1,0 +1,43 @@
+# Restricted per-case score files and identifiers: NEVER commit
+scores_run_*.csv
+*_restricted*
+*restricted*/
+case_id_map*
+*.xlsx
+*.xls
+# Any data except the synthetic example
+data/*
+!data/synthetic_example/
+!data/synthetic_example/**
+# Weights and media
+*.h5
+*.keras
+*.pt
+*.pth
+*.pkl
+*.joblib
+*.npy
+*.npz
+*.onnx
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.jpg
+*.jpeg
+*.png
+*.gif
+# Secrets and local files
+.env
+*.env
+*.pem
+*.key
+# Python / tools
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.idea/
+.vscode/
+.claude/

@@ -1,0 +1,170 @@
+# Hyperparameters used for the results reported in the article
+# (Sci, manuscript sci-4584196). Values only: no paths, weights or data.
+# See docs/METHODS.md for the meaning of every entry.
+
+data:
+  corpus_videos_article: 38    # corpus size stated in the article
+  pretraining_sequences: 39    # coordinate sequences used to pre-train the encoder
+  labelled_primary: 36         # cases rated by the primary evaluator (11 at risk / 25 low risk)
+  labelled_secondary: 36       # sequences assessed by the secondary evaluator
+  labelled_both: 34            # cases rated by both evaluators (primary: 9 at risk)
+  consensus: 21                # cases where both evaluators agree (7 at risk)
+  disputed: 13                 # cases where they disagree (resolved by a third evaluator)
+  majority_of_three_positive: 14
+  binary_label: {W_normal: 0, F_normal: 0, any_other_category: 1}
+  keypoints: 16
+  keypoint_order: [head_top, upper_neck, right_shoulder, right_elbow, right_wrist,
+                   left_shoulder, left_elbow, left_wrist, right_hip, right_knee,
+                   right_ankle, left_hip, left_knee, left_ankle, thorax, pelvis]
+
+pose_estimation:
+  architecture: EfficientHourglass-B4 (Block1to7), third-party, Apache-2.0
+  pretrained: MPII human pose (384x384)
+  input_resolution: 384
+  heatmap_resolution: 96
+  input_normalization: RGB / 255, ImageNet mean/std
+  decoding: local soft-argmax, beta 9, window sigma W/32
+  output: coordinates normalized to [0, 1]
+  fine_tuning:
+    annotated_frames: 137        # keyframes with 16/16 keypoints corrected manually (CVAT)
+    annotated_keypoints: 2219
+    split: by patient, 30 training videos / 8 validation videos
+    train_frames: 110
+    val_frames: 27
+    preprocessing: ROI crop with 15 % padding, resize to 384x384, Gaussian heatmaps
+    heatmap_sigma: 2.0
+    loss: MSE on heatmaps
+    optimizer: Adam
+    epochs: 50
+    batch_size: 4
+    learning_rate: 1.0e-4
+    frozen_layers: [stem, block1]
+    warm_start: "MPII backbone by layer name; head stage1_confs_tune copied from MPII stage1_confs"
+    augmentation: {horizontal_flip: "p 0.5 with left/right swap", rotation_deg: 25}
+    early_stopping: {monitor: val_loss, patience: 12, restore_best_weights: true}
+    reduce_lr: {factor: 0.5, patience: 5, min_lr: 1.0e-7}
+    batch_shuffle_seed: 42
+    best_epoch: 50
+  validation:
+    videos: 8
+    keypoints: 432
+    metric: median localization error, % of image diagonal
+    tests: [bootstrap 95 % CI, Wilcoxon signed-rank (paired, one-sided), Cliff's delta]
+
+pose_quality:
+  spatial_jump_threshold: 0.05   # normalized units, SJR
+  # TSS = 1 / (1 + std(displacements))
+
+temporal_encoder:                # self-supervised Transformer encoder ("v003")
+  input_dim: 42                  # 32 coordinates + 10 joint angles
+  d_model: 128
+  num_heads: 8
+  key_dim: 16                    # d_model / num_heads
+  num_layers: 4
+  dff: 512
+  dropout: 0.1
+  positional_encoding: sinusoidal
+  attention_mask: none           # bidirectional; see docs/EVALUATION_PROTOCOL.md section 7
+  output_head: Dense(42) per time step
+  objective: predict the input sequence shifted by one frame (MSE on every position)
+  training:
+    window: 100
+    stride: 50
+    sequences: 3073
+    epochs: 50
+    batch_size: 32
+    optimizer: Adam
+    learning_rate: 1.0e-4
+    validation_split: 0.2        # last 20 % of the windows
+    early_stopping_patience: 10
+    reduce_lr: {factor: 0.5, patience: 5, min_lr: 1.0e-6}
+    best_val_loss: 0.0115
+
+features:
+  joint_angles: 10               # normalized to [0, 1] by dividing by pi
+  feature_vector:
+    method: mean_encoding        # mean over time of the encoder output (42)
+    statistics: 18               # see METHODS.md 4.3
+    dim: 60
+    window: 1000                 # last 1000 frames if T > 1000, else the whole sequence (no padding)
+  sample_entropy:
+    m: 2
+    r_factor: 0.2                # tolerance = 0.2 * std(x), Chebyshev distance
+    subsample: 5                 # every 5th frame
+  kinematics:
+    smoothing_window: 5          # moving average, edge padding
+    n_features: 129
+
+components:                      # order of score_1..score_7 in the score files
+  - {name: mse_ft,             type: label-free, source: encoder reconstruction MSE, window: 100, stride: 50}
+  - {name: entropy_score_ft,   type: label-free, source: 1 / (1 + mean SampEn of joint angles)}
+  - {name: sampen_vel_mean_ft, type: label-free, source: mean SampEn of angular velocities}
+  - {name: corr_sym_mean_ft,   type: label-free, source: mean left/right Pearson correlation of joint angles}
+  - {name: kinematic_full,     type: supervised, source: random forest on 129 kinematic features}
+  - {name: classb,             type: supervised, source: MLP on the 60-D feature vector}
+  - {name: transformer_sup_ft, type: supervised, source: encoder fine-tuned with a classification head}
+
+supervised_models:
+  kinematic_full:
+    run_n36: {estimator: RandomForestClassifier, n_estimators: 300, min_samples_leaf: 2,
+              class_weight: balanced, random_state: 42, target: primary binary label}
+    run_n34: {estimator: RandomForestRegressor, n_estimators: 300, min_samples_leaf: 2,
+              random_state: 42, output: "prediction clipped to [0, 1]"}
+  classb:
+    layers: [Dense 128 relu, Dropout 0.3, Dense 64 relu, Dropout 0.3, Dense 32 relu, Dense 1 sigmoid]
+    optimizer: Adam
+    learning_rate: 1.0e-4
+    loss: binary_crossentropy
+    epochs: 100
+    batch_size: 8
+    early_stopping: {monitor: val_loss, patience: 15, restore_best_weights: true}
+    class_weight: balanced (run_n36 only)
+  transformer_sup_ft:
+    base: temporal_encoder
+    trainable: last encoder layer (n_unfreeze 1)
+    pooling: concat(global average, global max, last step)
+    head: [Dropout 0.4, Dense 64 relu, Dropout 0.4, Dense 1 sigmoid]
+    sequence_length: 1000        # FIRST 1000 frames, zero-padded at the end if shorter
+    optimizer: Adam
+    learning_rate: 1.0e-4
+    loss: binary_crossentropy
+    epochs: 50
+    batch_size: 4
+    early_stopping: {monitor: val_loss, patience: 8, restore_best_weights: true}
+    reduce_lr: {factor: 0.5, patience: 4, min_lr: 1.0e-6}
+    class_weight: balanced (run_n36 only)
+
+evaluation:
+  cross_validation: {scheme: StratifiedKFold, n_splits: 5, shuffle: true, random_state: 42,
+                     stratify_on: primary evaluator label}
+  orientation: flip component (1 - s) when its AUC vs the primary evaluator is < 0.5
+  fusion_reported: rank_all      # mean of per-component ranks (average ties)
+  fusion_alternatives: [mean_all]
+  bootstrap: {resamples: 5000, seed: 42, ci: percentile 95 %, skip_single_class_resamples: true}
+  permutation:
+    fixed_score: {permutations: 10000, rng: "numpy default_rng(42), copy + shuffle", p_value: "count(null >= obs) / N (also reported with +1 correction)"}
+    with_retraining: {permutations_per_model: 1000, rng: "default_rng(0), all drawn first", models: [RF classifier, RF regressor],
+                      pooled: 2000, seed: 0, features: 129 kinematic, folds: StratifiedKFold(5, rs 42)}
+  significance_threshold_auc: 0.730   # parametric p95: 0.50 + 1.645 * 0.14
+  chance_ceiling_auc: 0.80            # empirical p99 of the pooled retraining null (2000)
+  parametric_null: {mean: 0.5, sd: 0.14}   # z = (AUC - 0.5) / 0.14, one-sided normal p
+  operating_point: threshold maximizing F1 on the precision-recall curve of the rank_all score
+  computational_rater: {score: mean_all of the soft-target run (n=34),
+                        threshold: quantile at 1 - mean prevalence of the two evaluators,
+                        agreement: Cohen kappa, bootstrap 5000, seed 42}
+  reference_comparison: paired bootstrap of the AUC difference, 5000 resamples, seed 42
+
+risk_levels:                          # fused score -> display category (deployment)
+  low: "[0.00, 0.40)"
+  moderate_low: "[0.40, 0.55)"
+  moderate_high: "[0.55, 0.70)"
+  high: "[0.70, 1.00]"
+
+ensemble_orientation_deployed:        # sign per component in the deployed reference (n=34)
+  mse_ft: +1
+  entropy_score_ft: +1
+  sampen_vel_mean_ft: -1
+  corr_sym_mean_ft: +1
+  kinematic_full: +1
+  classb: +1
+  transformer_sup_ft: -1
